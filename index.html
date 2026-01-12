@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PROJECT: VOID-KEEPER v1.3</title>
+    <title>PROJECT: VOID-KEEPER v2.0 - GENESIS PROTOCOL</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@900&display=swap');
 
@@ -175,6 +175,22 @@
         }
         .reticle-dot { width: 4px; height: 4px; background: #fff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; }
 
+        /* ZOOM CONTROLS */
+        .zoom-controls {
+            position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 10px; z-index: 150; pointer-events: none;
+        }
+        .zoom-btn {
+            width: 40px; height: 40px; background: rgba(0,0,0,0.8); border: 2px solid var(--term-dim);
+            color: var(--term); font-size: 1.5rem; cursor: pointer; pointer-events: auto;
+            display: flex; align-items: center; justify-content: center; transition: 0.2s;
+        }
+        .zoom-btn:hover { border-color: var(--term); background: rgba(255, 170, 0, 0.2); }
+        .zoom-display {
+            position: absolute; top: 70px; right: 20px; color: var(--term);
+            font-size: 0.9rem; text-align: center; pointer-events: none; z-index: 150;
+        }
+
         @keyframes spin { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
         @keyframes glitch { 0% { transform: translate(1px,1px); } 25% { transform: translate(-1px,-1px); } 50% { transform: translate(2px,0); } 75% { transform: translate(-2px,0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -189,7 +205,7 @@
         <button class="menu-btn disabled" title="Coming Soon">MULTIPLAYER (OFFLINE)</button>
         <button class="menu-btn" onclick="UI.openSettings()">SETTINGS</button>
         <button class="menu-btn" onclick="window.close()">EXIT</button>
-        <div style="margin-top:20px; font-size:0.8rem; color:#666;">v1.3 STABLE // SYSTEM READY</div>
+        <div style="margin-top:20px; font-size:0.8rem; color:#666;">v2.0 GENESIS PROTOCOL // SYSTEM READY</div>
     </div>
 
     <div id="settings-modal">
@@ -287,6 +303,8 @@
                 <div class="resources">
                     <span class="c-fuel">FUEL: <b id="val-fuel">100</b></span>
                     <span class="c-scrap">SCRAP: <b id="val-scrap">0</b></span>
+                    <span style="color:#00ff88; text-shadow:0 0 10px #00ff88;">POWER: <b id="val-power">0</b></span>
+                    <span style="color:#ff00ff; text-shadow:0 0 10px #ff00ff;">RESONANCE: <b id="val-resonance">0</b></span>
                 </div>
             </div>
             <div style="display:flex; gap:15px; align-items:center;">
@@ -303,6 +321,15 @@
         </div>
 
         <button id="manual-open-btn" onclick="document.getElementById('manual-modal').style.display='flex'">📖</button>
+
+        <div class="zoom-controls">
+            <button class="zoom-btn" onclick="Game.cameraZoom(1.2)" title="Zoom In">+</button>
+            <button class="zoom-btn" onclick="Game.cameraZoom(0.8)" title="Zoom Out">−</button>
+            <button class="zoom-btn" onclick="Game.resetCamera()" title="Reset View">⌂</button>
+        </div>
+        <div class="zoom-display">
+            <div>ZOOM: <span id="zoom-level">1.0x</span></div>
+        </div>
 
         <div class="upgrades">
             <button class="upgrade-btn" id="btn-lens" onclick="Game.buy('lens')">
@@ -323,21 +350,39 @@
                 <div style="font-size:0.75rem; color:var(--scrap);">COST: <span id="cost-focus">10</span></div>
                 <div style="font-size:0.6rem; color:#666;">+BURN POWER</div>
             </button>
+            <button class="upgrade-btn" id="btn-expedition" onclick="Game.startExpedition()" style="border-color:var(--focus); color:var(--focus);">
+                <div style="font-weight:bold;">LAUNCH EXPEDITION</div>
+                <div style="font-size:0.75rem; color:var(--focus);">COST: <span id="cost-expedition">100</span> SCRAP</div>
+                <div style="font-size:0.6rem; color:#666;">BUILD NEW LIGHTHOUSE</div>
+            </button>
         </div>
 
     </div>
 
     <script>
         /**
-         * PROJECT: VOID-KEEPER v1.3 (STABLE)
-         * Restored Particles, Audio, Log, and Added Settings/Menus
+         * PROJECT: VOID-KEEPER v2.0 - GENESIS PROTOCOL
+         * Massive Expansion: Multi-Lighthouse, Evolution, Zoom, Expanded World
          */
 
         const CONFIG = {
             fuelDecay: 2.0, 
             baseFogCreep: 0.04, 
-            starCount: 200,
-            debrisSpawnRate: 0.015 
+            starCount: 500,
+            debrisSpawnRate: 0.015,
+            worldSize: 5000, // World is 5000x5000 units
+            minZoom: 0.25,
+            maxZoom: 4.0
+        };
+
+        // Evolution Stages
+        const LIGHTHOUSE_STAGES = {
+            1: { name: "Beacon Core", radius: 250, visualSize: 20, beamWidth: 0.5, rpm: 10 },
+            2: { name: "Signal Tower", radius: 400, visualSize: 35, beamWidth: 0.45, rpm: 15 },
+            3: { name: "Nexus Lighthouse", radius: 600, visualSize: 50, beamWidth: 0.4, rpm: 20 },
+            4: { name: "Stellar Beacon", radius: 900, visualSize: 70, beamWidth: 0.35, rpm: 25 },
+            5: { name: "System Anchor", radius: 1400, visualSize: 90, beamWidth: 0.3, rpm: 30 },
+            6: { name: "Galaxy Core", radius: 2000, visualSize: 120, beamWidth: 0.25, rpm: 40 }
         };
 
         const LoreData = [
@@ -426,14 +471,27 @@
             
             width: 0, height: 0, cx: 0, cy: 0,
             
+            // Camera System
+            camera: {
+                x: 0,
+                y: 0,
+                zoom: 1.0,
+                targetX: 0,
+                targetY: 0,
+                following: null // lighthouse ID being followed
+            },
+
             state: {
                 playing: false,
                 gameOver: false,
                 paused: false,
                 fuel: 100, maxFuel: 100,
                 scrap: 0,
+                power: 0, // New: Power resource
+                resonance: 0, // New: Resonance level
                 startTime: 0,
-                aliveTime: 0
+                aliveTime: 0,
+                evolutionStage: 1
             },
 
             settings: {
@@ -441,6 +499,13 @@
                 scale: 1.0,
                 fpsInterval: 1000/60
             },
+
+            // Multi-Lighthouse System
+            lighthouses: [], // Array of lighthouse objects
+            activeLighthouseId: 0, // ID of currently controlled lighthouse
+            connections: [], // Array of {from: id, to: id, type: 'beam'|'conduit'}
+            expeditions: [], // Array of expedition crafts
+            expeditionMode: null, // Current expedition placement mode
 
             beam: {
                 angle: 0,
@@ -453,10 +518,14 @@
             },
 
             debris: [],
+            ruins: [], // New: Procedural ruins
             stars: [],
+            nebulas: [], // New: Nebula effects for background
             particles: [],
-            mouse: {x:0, y:0},
+            mouse: {x:0, y:0, worldX:0, worldY:0},
             lastTime: 0,
+            isDragging: false,
+            dragStart: {x:0, y:0},
 
             upgrades: { lens:1, gear:1, focus:1 },
 
@@ -470,37 +539,159 @@
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 
+                // Initialize World
+                this.initWorld();
+                
+                // Create First Lighthouse at world center
+                const firstLighthouse = this.createLighthouse(CONFIG.worldSize/2, CONFIG.worldSize/2);
+                this.activeLighthouseId = firstLighthouse.id;
+                this.camera.following = firstLighthouse.id;
+                this.camera.x = firstLighthouse.x;
+                this.camera.y = firstLighthouse.y;
+                this.camera.targetX = firstLighthouse.x;
+                this.camera.targetY = firstLighthouse.y;
+                
                 // Input Listeners
-                window.addEventListener('mousedown', () => this.setHold(true));
-                window.addEventListener('mouseup', () => this.setHold(false));
-                window.addEventListener('touchstart', (e) => { this.setHold(true); this.updateMouse(e.touches[0]); }, {passive:false});
-                window.addEventListener('touchend', () => this.setHold(false));
-                window.addEventListener('mousemove', (e) => this.updateMouse(e));
-                window.addEventListener('touchmove', (e) => { e.preventDefault(); this.updateMouse(e.touches[0]); }, {passive:false});
+                window.addEventListener('mousedown', (e) => {
+                    if(e.button === 0) { // Left click
+                        this.setHold(true);
+                    } else if(e.button === 2 || (e.ctrlKey && e.button === 0)) { // Right click or Ctrl+click for drag
+                        this.isDragging = true;
+                        this.dragStart.x = e.clientX;
+                        this.dragStart.y = e.clientY;
+                    }
+                });
+                window.addEventListener('mouseup', (e) => {
+                    if(e.button === 0) this.setHold(false);
+                    this.isDragging = false;
+                });
+                window.addEventListener('touchstart', (e) => { 
+                    this.setHold(true); 
+                    this.updateMouse(e.touches[0]); 
+                }, {passive:false});
+                window.addEventListener('touchend', () => { 
+                    this.setHold(false);
+                    this.isDragging = false;
+                });
+                window.addEventListener('mousemove', (e) => {
+                    this.updateMouse(e);
+                    if(this.isDragging) {
+                        const dx = (e.clientX - this.dragStart.x) / this.camera.zoom;
+                        const dy = (e.clientY - this.dragStart.y) / this.camera.zoom;
+                        this.camera.x -= dx;
+                        this.camera.y -= dy;
+                        this.camera.targetX = this.camera.x;
+                        this.camera.targetY = this.camera.y;
+                        this.camera.following = null;
+                        this.dragStart.x = e.clientX;
+                        this.dragStart.y = e.clientY;
+                    }
+                });
+                window.addEventListener('touchmove', (e) => { 
+                    e.preventDefault(); 
+                    this.updateMouse(e.touches[0]); 
+                }, {passive:false});
+                
+                // Zoom with mouse wheel
+                this.wCv.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                    this.cameraZoom(delta);
+                }, {passive: false});
 
                 // Click Debris Logic
-                this.wCv.addEventListener('mousedown', (e) => this.checkClick(e.clientX, e.clientY));
-                this.wCv.addEventListener('touchstart', (e) => this.checkClick(e.touches[0].clientX, e.touches[0].clientY), {passive:false});
+                this.wCv.addEventListener('mousedown', (e) => {
+                    if(!this.isDragging && e.button === 0) {
+                        if(this.expeditionMode && this.expeditionMode.active) {
+                            this.placeExpeditionLighthouse(this.mouse.worldX, this.mouse.worldY);
+                        } else {
+                            this.checkClick(this.mouse.worldX, this.mouse.worldY);
+                        }
+                    }
+                });
+                this.wCv.addEventListener('touchstart', (e) => {
+                    this.checkClick(this.mouse.worldX, this.mouse.worldY);
+                }, {passive:false});
 
-                // Init World
-                for(let i=0; i<150; i++) {
-                    this.stars.push({ x: Math.random()*this.width, y: Math.random()*this.height, s: Math.random()*2, a: Math.random() });
-                }
+                // Prevent context menu
+                this.wCv.addEventListener('contextmenu', (e) => e.preventDefault());
 
                 this.state.playing = true;
                 this.state.startTime = Date.now();
-                this.log("SYSTEM INITIALIZED.");
-                this.log("FOG DENSITY: 98%.");
-                this.updateLore(); // Init Lore list
+                this.log("GENESIS PROTOCOL INITIATED.");
+                this.log("SYSTEM: BEACON CORE ONLINE.");
+                this.updateLore();
                 AudioSys.init();
                 
                 requestAnimationFrame((t) => this.loop(t));
             },
 
+            initWorld() {
+                // Generate Stars (background layer)
+                for(let i=0; i<CONFIG.starCount; i++) {
+                    this.stars.push({ 
+                        x: Math.random()*CONFIG.worldSize, 
+                        y: Math.random()*CONFIG.worldSize, 
+                        s: Math.random()*2 + 0.5, 
+                        a: Math.random() * 0.8 + 0.2,
+                        depth: Math.random() // For parallax
+                    });
+                }
+
+                // Generate Nebulas (cosmic clouds)
+                for(let i=0; i<8; i++) {
+                    this.nebulas.push({
+                        x: Math.random()*CONFIG.worldSize,
+                        y: Math.random()*CONFIG.worldSize,
+                        radius: 200 + Math.random()*400,
+                        color: `hsl(${220 + Math.random()*40}, 70%, ${30 + Math.random()*20}%)`,
+                        alpha: 0.1 + Math.random()*0.15
+                    });
+                }
+
+                // Generate Ruins
+                for(let i=0; i<50; i++) {
+                    this.ruins.push({
+                        x: Math.random()*CONFIG.worldSize,
+                        y: Math.random()*CONFIG.worldSize,
+                        type: Math.floor(Math.random()*3), // 0=pillar, 1=wall, 2=platform
+                        size: 30 + Math.random()*50,
+                        rotation: Math.random()*Math.PI*2
+                    });
+                }
+            },
+
+            createLighthouse(x, y) {
+                const id = this.lighthouses.length;
+                const stage = LIGHTHOUSE_STAGES[1];
+                const lighthouse = {
+                    id: id,
+                    x: x,
+                    y: y,
+                    stage: 1,
+                    beam: {
+                        angle: Math.random()*Math.PI*2,
+                        rpm: stage.rpm,
+                        radius: stage.radius,
+                        width: stage.beamWidth,
+                        baseWidth: stage.beamWidth,
+                        isHeld: false
+                    },
+                    upgrades: { lens: 1, gear: 1, focus: 1 },
+                    fuel: 100,
+                    maxFuel: 100,
+                    power: 0, // Power generation
+                    resonance: 0
+                };
+                this.lighthouses.push(lighthouse);
+                return lighthouse;
+            },
+
             resize() {
                 this.width = window.innerWidth;
                 this.height = window.innerHeight;
-                this.cx = this.width/2; this.cy = this.height/2;
+                this.cx = this.width/2; 
+                this.cy = this.height/2;
                 
                 this.wCv.width = this.width * this.settings.scale;
                 this.wCv.height = this.height * this.settings.scale;
@@ -514,6 +705,38 @@
                 
                 this.wCtx.scale(this.settings.scale, this.settings.scale);
                 this.fCtx.scale(this.settings.scale, this.settings.scale);
+            },
+
+            // Camera Functions
+            screenToWorld(screenX, screenY) {
+                return {
+                    x: (screenX - this.cx) / this.camera.zoom + this.camera.x,
+                    y: (screenY - this.cy) / this.camera.zoom + this.camera.y
+                };
+            },
+
+            worldToScreen(worldX, worldY) {
+                return {
+                    x: (worldX - this.camera.x) * this.camera.zoom + this.cx,
+                    y: (worldY - this.camera.y) * this.camera.zoom + this.cy
+                };
+            },
+
+            cameraZoom(factor) {
+                this.camera.zoom *= factor;
+                this.camera.zoom = Math.max(CONFIG.minZoom, Math.min(CONFIG.maxZoom, this.camera.zoom));
+                document.getElementById('zoom-level').innerText = this.camera.zoom.toFixed(2) + 'x';
+            },
+
+            resetCamera() {
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(lighthouse) {
+                    this.camera.following = lighthouse.id;
+                    this.camera.targetX = lighthouse.x;
+                    this.camera.targetY = lighthouse.y;
+                    this.camera.zoom = 1.0;
+                    document.getElementById('zoom-level').innerText = '1.00x';
+                }
             },
 
             log(msg) {
@@ -544,21 +767,27 @@
 
             setHold(held) {
                 if(this.state.paused || !this.state.playing) return;
-                this.beam.isHeld = held;
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(!lighthouse) return;
+                
+                lighthouse.beam.isHeld = held;
                 AudioSys.playFocus(held);
                 const ret = document.getElementById('reticle');
                 ret.style.display = held ? 'block' : 'none';
                 
                 if(held) {
-                    this.beam.width = 0.15; // Narrow Focus
+                    lighthouse.beam.width = 0.15;
                 } else {
-                    this.beam.width = this.beam.baseWidth;
+                    lighthouse.beam.width = lighthouse.beam.baseWidth;
                 }
             },
 
             updateMouse(e) {
                 this.mouse.x = e.clientX;
                 this.mouse.y = e.clientY;
+                const world = this.screenToWorld(e.clientX, e.clientY);
+                this.mouse.worldX = world.x;
+                this.mouse.worldY = world.y;
                 if(this.beam.isHeld) {
                     const ret = document.getElementById('reticle');
                     ret.style.left = e.clientX + 'px';
@@ -566,29 +795,30 @@
                 }
             },
 
-            checkClick(x, y) {
+            checkClick(worldX, worldY) {
                 if(this.state.paused || this.state.gameOver) return;
                 
+                // Check debris
                 for(let i=this.debris.length-1; i>=0; i--) {
                     let d = this.debris[i];
-                    // IMPORTANT: Only clickable if revealed
                     if(!d.revealed) continue;
                     
-                    let dist = Math.sqrt((x-d.x)**2 + (y-d.y)**2);
-                    // Debris hit radius
-                    if(dist < 40) {
-                        // Harvest logic
+                    let dist = Math.sqrt((worldX-d.x)**2 + (worldY-d.y)**2);
+                    if(dist < 40 / this.camera.zoom) {
                         let gain = (d.type==='fuel'?15:0);
-                        this.state.fuel = Math.min(this.state.maxFuel, this.state.fuel + gain);
-                        if(d.type==='scrap') this.state.scrap += 5;
-                        
-                        AudioSys.playCollect();
-                        this.createParticles(d.x, d.y, d.color);
-                        this.log(`HARVESTED: ${d.type.toUpperCase()}`);
-                        
-                        this.debris.splice(i, 1);
-                        this.updateUI();
-                        return;
+                        const lighthouse = this.lighthouses[this.activeLighthouseId];
+                        if(lighthouse) {
+                            lighthouse.fuel = Math.min(lighthouse.maxFuel, lighthouse.fuel + gain);
+                            if(d.type==='scrap') this.state.scrap += 5;
+                            
+                            AudioSys.playCollect();
+                            this.createParticles(d.x, d.y, d.color);
+                            this.log(`HARVESTED: ${d.type.toUpperCase()}`);
+                            
+                            this.debris.splice(i, 1);
+                            this.updateUI();
+                            return;
+                        }
                     }
                 }
             },
@@ -603,18 +833,240 @@
                 }
             },
 
+            renderLighthouse(ctx, lighthouse) {
+                const stage = LIGHTHOUSE_STAGES[lighthouse.stage];
+                const screen = this.worldToScreen(lighthouse.x, lighthouse.y);
+                if(screen.x < -100 || screen.x > this.width + 100 || screen.y < -100 || screen.y > this.height + 100) return;
+                
+                const size = stage.visualSize * this.camera.zoom;
+                
+                ctx.save();
+                ctx.translate(screen.x, screen.y);
+                ctx.scale(this.camera.zoom, this.camera.zoom);
+                
+                // Render based on stage
+                if(lighthouse.stage === 1) {
+                    // Beacon Core - Simple glowing core
+                    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+                    grad.addColorStop(0, '#ffaa00');
+                    grad.addColorStop(0.5, '#ff8800');
+                    grad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size*0.4, 0, Math.PI*2);
+                    ctx.fill();
+                } else if(lighthouse.stage === 2) {
+                    // Signal Tower - Basic tower structure
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-size*0.3, -size*1.5, size*0.6, size*1.5);
+                    
+                    // Glowing core at top
+                    const grad = ctx.createRadialGradient(0, -size*1.5, 0, 0, -size*1.5, size*0.8);
+                    grad.addColorStop(0, '#ffaa00');
+                    grad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(0, -size*1.5, size*0.8, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    // Base platform
+                    ctx.fillStyle = '#444';
+                    ctx.fillRect(-size*0.5, size*0.2, size, size*0.3);
+                } else {
+                    // Higher stages - Cyber Core with rotating rings
+                    // Base structure
+                    ctx.fillStyle = '#222';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size*0.8, 0, Math.PI*2);
+                    ctx.fill();
+                    
+                    // Rotating ring (animation would need time variable)
+                    ctx.strokeStyle = '#ffaa00';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size*0.7, 0, Math.PI*2);
+                    ctx.stroke();
+                    
+                    // Core glow
+                    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size*0.5);
+                    grad.addColorStop(0, lighthouse.stage >= 4 ? '#00ffff' : '#ffaa00');
+                    grad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, size*0.5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+            },
+
             buy(type) {
-                let cost = Math.floor(5 * Math.pow(1.5, this.upgrades[type]));
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(!lighthouse) return;
+                
+                let cost = Math.floor(5 * Math.pow(1.5, lighthouse.upgrades[type]));
                 if(type === 'focus') cost *= 2;
                 
                 if(this.state.scrap >= cost) {
                     this.state.scrap -= cost;
-                    this.upgrades[type]++;
-                    if(type === 'lens') { this.beam.radius += 40; this.log("OPTICS UPGRADED."); }
-                    if(type === 'gear') { this.beam.rpm += 5; this.log("MOTORS OVERCLOCKED."); }
-                    if(type === 'focus') { this.log("FOCUS ARRAY ALIGNED."); }
+                    lighthouse.upgrades[type]++;
+                    
+                    const stage = LIGHTHOUSE_STAGES[lighthouse.stage];
+                    if(type === 'lens') { 
+                        lighthouse.beam.radius += 40; 
+                        this.log("OPTICS UPGRADED."); 
+                    }
+                    if(type === 'gear') { 
+                        lighthouse.beam.rpm += 5; 
+                        this.log("MOTORS OVERCLOCKED."); 
+                    }
+                    if(type === 'focus') { 
+                        this.log("FOCUS ARRAY ALIGNED."); 
+                    }
+                    
+                    // Check for evolution
+                    this.checkEvolution(lighthouse);
                     this.updateUI();
                 }
+            },
+
+            checkEvolution(lighthouse) {
+                const totalUpgrades = lighthouse.upgrades.lens + lighthouse.upgrades.gear + lighthouse.upgrades.focus;
+                const nextStage = lighthouse.stage + 1;
+                
+                if(nextStage <= 6 && totalUpgrades >= nextStage * 10) {
+                    lighthouse.stage = nextStage;
+                    const stage = LIGHTHOUSE_STAGES[nextStage];
+                    lighthouse.beam.radius = stage.radius;
+                    lighthouse.beam.rpm = stage.rpm;
+                    lighthouse.beam.width = stage.beamWidth;
+                    lighthouse.beam.baseWidth = stage.beamWidth;
+                    this.log(`EVOLUTION: ${stage.name.toUpperCase()} ACHIEVED!`);
+                    
+                    // Stage 5 unlocks expeditions
+                    if(nextStage === 5) {
+                        this.log("EXPEDITION CRAFT UNLOCKED!");
+                    }
+                }
+            },
+
+            startExpedition() {
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(!lighthouse || lighthouse.stage < 5) {
+                    this.log("EXPEDITION REQUIRES: SYSTEM ANCHOR STAGE");
+                    return;
+                }
+                
+                const cost = 100;
+                if(this.state.scrap < cost) {
+                    this.log("INSUFFICIENT SCRAP FOR EXPEDITION");
+                    return;
+                }
+                
+                this.state.scrap -= cost;
+                this.log("EXPEDITION CRAFT LAUNCHED. CLICK TO PLACE NEW LIGHTHOUSE.");
+                
+                // Enter expedition placement mode
+                this.expeditionMode = {
+                    active: true,
+                    craftX: lighthouse.x,
+                    craftY: lighthouse.y,
+                    targetX: null,
+                    targetY: null,
+                    progress: 0
+                };
+            },
+
+            placeExpeditionLighthouse(x, y) {
+                // Check distance from existing lighthouses
+                let tooClose = false;
+                for(let lh of this.lighthouses) {
+                    const dist = Math.sqrt((x - lh.x)**2 + (y - lh.y)**2);
+                    if(dist < 600) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                
+                if(tooClose) {
+                    this.log("LOCATION TOO CLOSE TO EXISTING LIGHTHOUSE");
+                    return;
+                }
+                
+                // Create new lighthouse
+                const newLighthouse = this.createLighthouse(x, y);
+                this.log(`NEW LIGHTHOUSE ${newLighthouse.id} ESTABLISHED.`);
+                
+                // Auto-connect to nearest lighthouse
+                let nearest = null;
+                let nearestDist = Infinity;
+                this.lighthouses.forEach(lh => {
+                    if(lh.id === newLighthouse.id) return;
+                    const dist = Math.sqrt((x - lh.x)**2 + (y - lh.y)**2);
+                    if(dist < nearestDist) {
+                        nearestDist = dist;
+                        nearest = lh;
+                    }
+                });
+                
+                if(nearest && nearestDist < 1500) {
+                    this.createConnection(nearest.id, newLighthouse.id, 'beam');
+                    this.log(`CONNECTED TO LIGHTHOUSE ${nearest.id}`);
+                }
+                
+                this.expeditionMode = null;
+                this.updateConnectionNetwork();
+            },
+
+            createConnection(fromId, toId, type) {
+                // Check if connection already exists
+                const exists = this.connections.some(c => 
+                    (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId)
+                );
+                if(exists) return;
+                
+                this.connections.push({ from: fromId, to: toId, type: type });
+            },
+
+            updateConnectionNetwork() {
+                // Calculate resonance based on connections
+                let maxResonance = 0;
+                const visited = new Set();
+                
+                const dfs = (lhId, resonance) => {
+                    if(visited.has(lhId)) return;
+                    visited.add(lhId);
+                    
+                    const connections = this.connections.filter(c => c.from === lhId || c.to === lhId);
+                    resonance += connections.length;
+                    maxResonance = Math.max(maxResonance, resonance);
+                    
+                    connections.forEach(c => {
+                        const nextId = c.from === lhId ? c.to : c.from;
+                        if(!visited.has(nextId)) {
+                            dfs(nextId, resonance);
+                        }
+                    });
+                };
+                
+                this.lighthouses.forEach(lh => {
+                    if(!visited.has(lh.id)) {
+                        dfs(lh.id, 0);
+                    }
+                });
+                
+                this.state.resonance = maxResonance;
+                
+                // Update power generation (lighthouses generate power over time)
+                this.lighthouses.forEach(lh => {
+                    lh.power += 0.01 * (1 + this.state.resonance * 0.1);
+                });
+                this.state.power = this.lighthouses.reduce((sum, lh) => sum + lh.power, 0);
             },
 
             hardWipe() {
@@ -640,41 +1092,64 @@
             loop(t) {
                 requestAnimationFrame((timestamp) => this.loop(timestamp));
                 
-                // FPS Limiter
                 let elapsed = t - this.lastTime;
                 if(this.settings.fpsInterval > 0 && elapsed < this.settings.fpsInterval) return;
                 this.lastTime = t - (elapsed % this.settings.fpsInterval);
 
                 if(!this.state.playing || this.state.paused || this.state.gameOver) return;
 
-                // LOGIC
+                const dt = elapsed / 16.67; // Delta time normalized to 60fps
                 this.state.aliveTime = (Date.now() - this.state.startTime) / 1000;
-                this.state.fuel -= 0.05; // Fuel Decay
-                if(this.state.fuel <= 0) { this.triggerDeath(); return; }
 
-                if(this.beam.isHeld) {
-                    // Manual Aim
-                    let dx = this.mouse.x - this.cx;
-                    let dy = this.mouse.y - this.cy;
-                    let target = Math.atan2(dy, dx);
-                    
-                    // Smooth turn
-                    let diff = target - this.beam.angle;
-                    while(diff < -Math.PI) diff += Math.PI*2;
-                    while(diff > Math.PI) diff -= Math.PI*2;
-                    this.beam.angle += diff * 0.2;
-                } else {
-                    // Auto Spin
-                    this.beam.angle += (this.beam.rpm * Math.PI * 2) / 3600;
+                // Update Camera (smooth follow)
+                if(this.camera.following !== null) {
+                    const lighthouse = this.lighthouses[this.camera.following];
+                    if(lighthouse) {
+                        this.camera.targetX = lighthouse.x;
+                        this.camera.targetY = lighthouse.y;
+                    }
+                }
+                this.camera.x += (this.camera.targetX - this.camera.x) * 0.1;
+                this.camera.y += (this.camera.targetY - this.camera.y) * 0.1;
+
+                // Update Connection Network
+                this.updateConnectionNetwork();
+
+                // Update Active Lighthouse
+                const activeLighthouse = this.lighthouses[this.activeLighthouseId];
+                if(!activeLighthouse) return;
+
+                activeLighthouse.fuel -= 0.05 * dt;
+                if(activeLighthouse.fuel <= 0) { this.triggerDeath(); return; }
+                
+                // Update Expeditions
+                if(this.expeditionMode && this.expeditionMode.active) {
+                    // Animate expedition craft
+                    this.expeditionMode.progress += 0.01 * dt;
                 }
 
-                // Spawn Debris
-                if(Math.random() < 0.02) {
+                // Beam Control
+                if(activeLighthouse.beam.isHeld) {
+                    const world = this.screenToWorld(this.mouse.x, this.mouse.y);
+                    let dx = world.x - activeLighthouse.x;
+                    let dy = world.y - activeLighthouse.y;
+                    let target = Math.atan2(dy, dx);
+                    
+                    let diff = target - activeLighthouse.beam.angle;
+                    while(diff < -Math.PI) diff += Math.PI*2;
+                    while(diff > Math.PI) diff -= Math.PI*2;
+                    activeLighthouse.beam.angle += diff * 0.2 * dt;
+                } else {
+                    activeLighthouse.beam.angle += (activeLighthouse.beam.rpm * Math.PI * 2) / 3600 * dt;
+                }
+
+                // Spawn Debris near active lighthouse
+                if(Math.random() < 0.02 * dt) {
                     let a = Math.random() * Math.PI * 2;
-                    let d = 100 + Math.random() * (this.width/2);
+                    let d = 200 + Math.random() * 800;
                     this.debris.push({
-                        x: this.cx + Math.cos(a)*d,
-                        y: this.cy + Math.sin(a)*d,
+                        x: activeLighthouse.x + Math.cos(a)*d,
+                        y: activeLighthouse.y + Math.sin(a)*d,
                         type: Math.random()>0.4?'fuel':'scrap',
                         revealed: false,
                         color: Math.random()>0.4?'#ff3333':'#00aaff'
@@ -684,143 +1159,244 @@
                 // Update Particles
                 for(let i=this.particles.length-1; i>=0; i--) {
                     let p = this.particles[i];
-                    p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= 0.05 * dt;
                     if(p.life <= 0) this.particles.splice(i, 1);
                 }
 
-                // RENDER
-                // 1. World
-                this.wCtx.fillStyle = '#020202';
+                // RENDER WORLD
+                this.wCtx.fillStyle = '#010101';
                 this.wCtx.fillRect(0,0,this.width, this.height);
-                
-                // Stars
+
+                // Save context for camera transform
+                this.wCtx.save();
+                this.wCtx.translate(this.cx, this.cy);
+                this.wCtx.scale(this.camera.zoom, this.camera.zoom);
+                this.wCtx.translate(-this.camera.x, -this.camera.y);
+
+                // Render Nebulas
+                this.nebulas.forEach(n => {
+                    const screen = this.worldToScreen(n.x, n.y);
+                    if(screen.x > -n.radius*2 && screen.x < this.width + n.radius*2 && 
+                       screen.y > -n.radius*2 && screen.y < this.height + n.radius*2) {
+                        const grad = this.wCtx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.radius);
+                        grad.addColorStop(0, n.color.replace(')', ', ' + n.alpha + ')').replace('hsl', 'hsla'));
+                        grad.addColorStop(1, n.color.replace(')', ', 0)').replace('hsl', 'hsla'));
+                        this.wCtx.fillStyle = grad;
+                        this.wCtx.beginPath();
+                        this.wCtx.arc(n.x, n.y, n.radius, 0, Math.PI*2);
+                        this.wCtx.fill();
+                    }
+                });
+
+                // Render Stars
                 this.wCtx.fillStyle = '#fff';
                 this.stars.forEach(s => {
-                    this.wCtx.globalAlpha = Math.random() * s.a;
+                    this.wCtx.globalAlpha = s.a;
                     this.wCtx.fillRect(s.x, s.y, s.s, s.s);
                 });
                 this.wCtx.globalAlpha = 1;
 
-                // Debris
+                // Render Ruins
+                this.ruins.forEach(r => {
+                    const screen = this.worldToScreen(r.x, r.y);
+                    if(screen.x > -r.size*2 && screen.x < this.width + r.size*2) {
+                        this.wCtx.save();
+                        this.wCtx.translate(r.x, r.y);
+                        this.wCtx.rotate(r.rotation);
+                        this.wCtx.fillStyle = '#333';
+                        if(r.type === 0) { // Pillar
+                            this.wCtx.fillRect(-r.size*0.2, -r.size*0.5, r.size*0.4, r.size);
+                        } else if(r.type === 1) { // Wall
+                            this.wCtx.fillRect(-r.size*0.5, -r.size*0.1, r.size, r.size*0.2);
+                        } else { // Platform
+                            this.wCtx.fillRect(-r.size*0.5, -r.size*0.5, r.size, r.size*0.3);
+                        }
+                        this.wCtx.restore();
+                    }
+                });
+
+                // Render Lighthouses
+                this.lighthouses.forEach(lh => this.renderLighthouse(this.wCtx, lh));
+
+                // Render Connections
+                this.connections.forEach(conn => {
+                    const from = this.lighthouses[conn.from];
+                    const to = this.lighthouses[conn.to];
+                    if(from && to) {
+                        this.wCtx.strokeStyle = conn.type === 'beam' ? 'rgba(255, 170, 0, 0.3)' : 'rgba(0, 170, 255, 0.2)';
+                        this.wCtx.lineWidth = conn.type === 'beam' ? 2 / this.camera.zoom : 1 / this.camera.zoom;
+                        this.wCtx.setLineDash(conn.type === 'conduit' ? [5/this.camera.zoom, 5/this.camera.zoom] : []);
+                        this.wCtx.beginPath();
+                        this.wCtx.moveTo(from.x, from.y);
+                        this.wCtx.lineTo(to.x, to.y);
+                        this.wCtx.stroke();
+                        this.wCtx.setLineDash([]);
+                    }
+                });
+
+                // Render Expedition Craft (in placement mode)
+                if(this.expeditionMode && this.expeditionMode.active) {
+                    const target = this.screenToWorld(this.mouse.x, this.mouse.y);
+                    
+                    // Draw line from origin to target
+                    this.wCtx.strokeStyle = '#00ffff';
+                    this.wCtx.lineWidth = 2 / this.camera.zoom;
+                    this.wCtx.setLineDash([10/this.camera.zoom, 5/this.camera.zoom]);
+                    this.wCtx.beginPath();
+                    this.wCtx.moveTo(this.expeditionMode.craftX, this.expeditionMode.craftY);
+                    this.wCtx.lineTo(target.x, target.y);
+                    this.wCtx.stroke();
+                    this.wCtx.setLineDash([]);
+                    
+                    // Craft icon at target
+                    this.wCtx.fillStyle = '#00ffff';
+                    this.wCtx.beginPath();
+                    this.wCtx.arc(target.x, target.y, 15/this.camera.zoom, 0, Math.PI*2);
+                    this.wCtx.fill();
+                    this.wCtx.strokeStyle = '#ffffff';
+                    this.wCtx.lineWidth = 2 / this.camera.zoom;
+                    this.wCtx.stroke();
+                    
+                    this.expeditionMode.targetX = target.x;
+                    this.expeditionMode.targetY = target.y;
+                }
+
+                // Render Debris
                 this.debris.forEach(d => {
                     this.wCtx.save();
                     this.wCtx.translate(d.x, d.y);
-                    this.wCtx.fillStyle = (d.type==='fuel') ? 'var(--fuel)' : 'var(--scrap)';
                     
                     if(d.revealed) {
-                        // Draw Target Brackets
                         this.wCtx.strokeStyle = d.type==='fuel' ? 'var(--fuel)' : 'var(--scrap)';
-                        this.wCtx.lineWidth = 2;
+                        this.wCtx.lineWidth = 2 / this.camera.zoom;
                         this.wCtx.strokeRect(-10, -10, 20, 20);
-                        this.wCtx.font = '10px Share Tech Mono';
+                        this.wCtx.font = (10/this.camera.zoom) + 'px Share Tech Mono';
                         this.wCtx.fillStyle = '#fff';
                         this.wCtx.fillText(d.type.toUpperCase(), -10, -15);
-                        
-                        // Solid body when revealed
                         this.wCtx.fillStyle = d.color;
                         this.wCtx.fillRect(-4,-4,8,8);
                     } else {
-                        // Just a faint glint in fog
                         if(Math.random()>0.95) {
                             this.wCtx.fillStyle = '#fff';
-                            this.wCtx.fillRect(0,0,2,2);
+                            this.wCtx.fillRect(0,0,2/this.camera.zoom,2/this.camera.zoom);
                         }
                     }
                     this.wCtx.restore();
                 });
 
-                // Particles
+                // Render Particles
                 this.particles.forEach(p => {
                     this.wCtx.fillStyle = p.color;
                     this.wCtx.globalAlpha = p.life;
-                    this.wCtx.fillRect(p.x, p.y, 3, 3);
+                    this.wCtx.fillRect(p.x, p.y, 3/this.camera.zoom, 3/this.camera.zoom);
                 });
                 this.wCtx.globalAlpha = 1;
 
-                // Center Beacon
-                this.wCtx.fillStyle = '#000';
-                this.wCtx.beginPath(); this.wCtx.arc(this.cx, this.cy, 15, 0, Math.PI*2); this.wCtx.fill();
-                this.wCtx.strokeStyle = 'var(--term)';
-                this.wCtx.lineWidth = 2;
-                this.wCtx.stroke();
+                this.wCtx.restore(); // Restore camera transform
 
-                // 2. Fog
+                // RENDER FOG
                 let creepSpeed = CONFIG.baseFogCreep;
-                if(this.state.fuel < 20) creepSpeed = 0.08;
+                if(activeLighthouse.fuel < 20) creepSpeed = 0.08;
                 
                 this.fCtx.globalCompositeOperation = 'source-over';
                 this.fCtx.fillStyle = this.settings.quality === 'high' ? `rgba(5,5,5,${creepSpeed})` : 'rgba(0,0,0,0.2)'; 
                 this.fCtx.fillRect(0,0,this.width, this.height);
 
-                // Cut Beam
+                // Cut Beams for all lighthouses
                 this.fCtx.globalCompositeOperation = 'destination-out';
-                this.fCtx.beginPath();
-                this.fCtx.moveTo(this.cx, this.cy);
-                let r = this.beam.radius;
-                // Focus Mode burns further
-                if(this.beam.isHeld) r *= 1.5;
-                
-                this.fCtx.arc(this.cx, this.cy, r, this.beam.angle - this.beam.width/2, this.beam.angle + this.beam.width/2);
-                this.fCtx.closePath();
-                
-                if(this.settings.quality === 'high') {
-                    let g = this.fCtx.createRadialGradient(this.cx, this.cy, 20, this.cx, this.cy, r);
-                    g.addColorStop(0, 'rgba(0,0,0,1)');
-                    g.addColorStop(1, 'rgba(0,0,0,0)');
-                    this.fCtx.fillStyle = g;
-                    this.fCtx.fill();
-                } else {
-                    this.fCtx.fill();
-                }
-
-                // Safe Zone
-                this.fCtx.beginPath(); this.fCtx.arc(this.cx, this.cy, 60, 0, Math.PI*2); this.fCtx.fill();
-
-                // 3. Logic: Reveal Check
-                this.debris.forEach(d => {
-                    let dx = d.x - this.cx; let dy = d.y - this.cy;
-                    let dist = Math.sqrt(dx*dx + dy*dy);
-                    let angle = Math.atan2(dy, dx);
-                    let diff = angle - this.beam.angle;
-                    while(diff < -Math.PI) diff += Math.PI*2;
-                    while(diff > Math.PI) diff -= Math.PI*2;
+                this.lighthouses.forEach(lh => {
+                    const screen = this.worldToScreen(lh.x, lh.y);
+                    let r = lh.beam.radius * this.camera.zoom;
+                    if(lh.beam.isHeld) r *= 1.5;
                     
-                    let activeR = this.beam.isHeld ? r : this.beam.radius;
-                    let activeW = this.beam.width/2 + 0.1;
+                    this.fCtx.beginPath();
+                    this.fCtx.moveTo(screen.x, screen.y);
+                    this.fCtx.arc(screen.x, screen.y, r, lh.beam.angle - lh.beam.width/2, lh.beam.angle + lh.beam.width/2);
+                    this.fCtx.closePath();
                     
-                    // Reveal if inside beam
-                    if(dist < activeR && Math.abs(diff) < activeW) {
-                        d.revealed = true;
+                    if(this.settings.quality === 'high') {
+                        let g = this.fCtx.createRadialGradient(screen.x, screen.y, 20, screen.x, screen.y, r);
+                        g.addColorStop(0, 'rgba(0,0,0,1)');
+                        g.addColorStop(1, 'rgba(0,0,0,0)');
+                        this.fCtx.fillStyle = g;
+                        this.fCtx.fill();
                     } else {
-                        d.revealed = false;
+                        this.fCtx.fill();
                     }
+                    
+                    // Safe zone
+                    this.fCtx.beginPath();
+                    this.fCtx.arc(screen.x, screen.y, 60 * this.camera.zoom, 0, Math.PI*2);
+                    this.fCtx.fill();
+                });
+
+                // Reveal Check
+                this.debris.forEach(d => {
+                    let closestDist = Infinity;
+                    let inBeam = false;
+                    
+                    this.lighthouses.forEach(lh => {
+                        let dx = d.x - lh.x;
+                        let dy = d.y - lh.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        let angle = Math.atan2(dy, dx);
+                        let diff = angle - lh.beam.angle;
+                        while(diff < -Math.PI) diff += Math.PI*2;
+                        while(diff > Math.PI) diff -= Math.PI*2;
+                        
+                        let activeR = lh.beam.isHeld ? lh.beam.radius * 1.5 : lh.beam.radius;
+                        let activeW = lh.beam.width/2 + 0.1;
+                        
+                        if(dist < activeR && Math.abs(diff) < activeW) {
+                            inBeam = true;
+                        }
+                    });
+                    
+                    d.revealed = inBeam;
                 });
 
                 this.updateUI();
             },
 
             updateUI() {
-                document.getElementById('val-fuel').innerText = Math.floor(this.state.fuel);
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(!lighthouse) return;
+                
+                document.getElementById('val-fuel').innerText = Math.floor(lighthouse.fuel);
                 document.getElementById('val-scrap').innerText = this.state.scrap;
+                document.getElementById('val-power').innerText = Math.floor(this.state.power);
+                document.getElementById('val-resonance').innerText = this.state.resonance;
                 document.getElementById('time-display').innerText = "T+ " + Math.floor(this.state.aliveTime) + "s";
+                
+                // Expedition button
+                const expBtn = document.getElementById('btn-expedition');
+                if(lighthouse && lighthouse.stage >= 5) {
+                    expBtn.disabled = this.state.scrap < 100 || (this.expeditionMode && this.expeditionMode.active);
+                } else {
+                    expBtn.disabled = true;
+                }
+                
+                // Update header with stage name
+                const stage = LIGHTHOUSE_STAGES[lighthouse.stage];
+                document.querySelector('.header-bar h2').innerText = `UNIT ${lighthouse.id} // ${stage.name.toUpperCase()}`;
                 
                 if(Math.floor(this.state.aliveTime) % 5 === 0) this.updateLore();
 
-                const fuelPct = (this.state.fuel / this.state.maxFuel) * 100;
+                const fuelPct = (lighthouse.fuel / lighthouse.maxFuel) * 100;
                 document.getElementById('bar-fuel').style.width = fuelPct + "%";
                 
                 // Costs
-                let cLens = Math.floor(5 * Math.pow(1.5, this.upgrades.lens));
-                let cGear = Math.floor(5 * Math.pow(1.5, this.upgrades.gear));
-                let cFocus = Math.floor(10 * Math.pow(1.5, this.upgrades.focus));
+                let cLens = Math.floor(5 * Math.pow(1.5, lighthouse.upgrades.lens));
+                let cGear = Math.floor(5 * Math.pow(1.5, lighthouse.upgrades.gear));
+                let cFocus = Math.floor(10 * Math.pow(1.5, lighthouse.upgrades.focus));
                 
                 document.getElementById('cost-lens').innerText = cLens;
                 document.getElementById('cost-gear').innerText = cGear;
                 document.getElementById('cost-focus').innerText = cFocus;
                 
-                document.getElementById('lvl-lens').innerText = this.upgrades.lens;
-                document.getElementById('lvl-gear').innerText = this.upgrades.gear;
-                document.getElementById('lvl-focus').innerText = this.upgrades.focus;
+                document.getElementById('lvl-lens').innerText = lighthouse.upgrades.lens;
+                document.getElementById('lvl-gear').innerText = lighthouse.upgrades.gear;
+                document.getElementById('lvl-focus').innerText = lighthouse.upgrades.focus;
 
                 document.getElementById('btn-lens').disabled = this.state.scrap < cLens;
                 document.getElementById('btn-gear').disabled = this.state.scrap < cGear;
