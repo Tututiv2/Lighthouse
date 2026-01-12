@@ -168,10 +168,11 @@
 
         /* TARGET RETICLE */
         #reticle {
-            position: absolute; width: 60px; height: 60px; border: 2px solid var(--focus);
+            position: fixed; width: 60px; height: 60px; border: 2px solid var(--focus);
             border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
             display: none; box-shadow: 0 0 20px var(--focus);
             animation: spin 1s linear infinite; z-index: 100;
+            left: 50%; top: 50%; /* Start centered */
         }
         .reticle-dot { width: 4px; height: 4px; background: #fff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; }
 
@@ -582,6 +583,7 @@
             particles: [],
             mouse: {x:0, y:0, worldX:0, worldY:0},
             lastTime: 0,
+            frameTime: 0, // For delta time calculation
             isDragging: false,
             dragStart: {x:0, y:0},
 
@@ -611,6 +613,10 @@
                 
                 // Input Listeners
                 window.addEventListener('mousedown', (e) => {
+                    // Don't trigger if clicking on UI elements
+                    if(e.target.closest('.ui-layer, #settings-modal, #manual-modal, .menu-btn, .upgrade-btn, .cog-btn, .close-btn, .man-tab')) {
+                        return;
+                    }
                     if(e.button === 0) { // Left click
                         this.setHold(true);
                     } else if(e.button === 2 || (e.ctrlKey && e.button === 0)) { // Right click or Ctrl+click for drag
@@ -623,9 +629,11 @@
                     if(e.button === 0) this.setHold(false);
                     this.isDragging = false;
                 });
-                window.addEventListener('touchstart', (e) => { 
-                    this.setHold(true); 
-                    this.updateMouse(e.touches[0]); 
+                window.addEventListener('touchstart', (e) => {
+                    if(!e.target.closest('.ui-layer, #settings-modal, #manual-modal')) {
+                        this.setHold(true); 
+                        this.updateMouse(e.touches[0]);
+                    }
                 }, {passive:false});
                 window.addEventListener('touchend', () => { 
                     this.setHold(false);
@@ -846,7 +854,8 @@
                 const world = this.screenToWorld(e.clientX, e.clientY);
                 this.mouse.worldX = world.x;
                 this.mouse.worldY = world.y;
-                if(this.beam.isHeld) {
+                const lighthouse = this.lighthouses[this.activeLighthouseId];
+                if(lighthouse && lighthouse.beam.isHeld) {
                     const ret = document.getElementById('reticle');
                     ret.style.left = e.clientX + 'px';
                     ret.style.top = e.clientY + 'px';
@@ -856,13 +865,14 @@
             checkClick(worldX, worldY) {
                 if(this.state.paused || this.state.gameOver) return;
                 
-                // Check debris
+                // Check debris (use absolute distance, not zoom-adjusted)
                 for(let i=this.debris.length-1; i>=0; i--) {
                     let d = this.debris[i];
                     if(!d.revealed) continue;
                     
                     let dist = Math.sqrt((worldX-d.x)**2 + (worldY-d.y)**2);
-                    if(dist < 40 / this.camera.zoom) {
+                    // Use fixed world distance, not zoom-adjusted
+                    if(dist < 40) {
                         let gain = (d.type==='fuel'?15:0);
                         const lighthouse = this.lighthouses[this.activeLighthouseId];
                         if(lighthouse) {
@@ -1224,13 +1234,29 @@
             loop(t) {
                 requestAnimationFrame((timestamp) => this.loop(timestamp));
                 
-                let elapsed = t - this.lastTime;
-                if(this.settings.fpsInterval > 0 && elapsed < this.settings.fpsInterval) return;
-                this.lastTime = t - (elapsed % this.settings.fpsInterval);
+                // Frame rate independence - use actual elapsed time
+                let elapsed = 0;
+                if(this.lastTime === 0) {
+                    this.lastTime = t;
+                } else {
+                    elapsed = t - this.lastTime;
+                }
+                
+                // FPS limiter (skip if too early)
+                if(this.settings.fpsInterval > 0) {
+                    if(elapsed < this.settings.fpsInterval) return;
+                    this.lastTime = t - (elapsed % this.settings.fpsInterval);
+                } else {
+                    // Unlimited FPS - use actual elapsed time
+                    this.lastTime = t;
+                }
 
                 if(!this.state.playing || this.state.paused || this.state.gameOver) return;
 
-                const dt = elapsed / 16.67; // Delta time normalized to 60fps
+                // Delta time in seconds (frame-rate independent)
+                const dt = Math.min(elapsed / 16.67, 2.0); // Cap at 2x to prevent huge jumps
+                if(isNaN(dt) || dt <= 0) return; // Safety check
+                
                 this.state.aliveTime = (Date.now() - this.state.startTime) / 1000;
 
                 // Update Camera (smooth follow)
@@ -1533,11 +1559,18 @@
                 const lighthouse = this.lighthouses[this.activeLighthouseId];
                 if(!lighthouse) return;
                 
-                document.getElementById('val-fuel').innerText = Math.floor(lighthouse.fuel);
-                document.getElementById('val-scrap').innerText = this.state.scrap;
-                document.getElementById('val-power').innerText = Math.floor(this.state.power);
-                document.getElementById('val-resonance').innerText = this.state.resonance;
-                document.getElementById('time-display').innerText = "T+ " + Math.floor(this.state.aliveTime) + "s";
+                // Prevent NaN display
+                const fuel = isNaN(lighthouse.fuel) ? 0 : Math.floor(lighthouse.fuel);
+                const scrap = isNaN(this.state.scrap) ? 0 : this.state.scrap;
+                const power = isNaN(this.state.power) ? 0 : Math.floor(this.state.power);
+                const resonance = isNaN(this.state.resonance) ? 0 : this.state.resonance;
+                const aliveTime = isNaN(this.state.aliveTime) ? 0 : Math.floor(this.state.aliveTime);
+                
+                document.getElementById('val-fuel').innerText = fuel;
+                document.getElementById('val-scrap').innerText = scrap;
+                document.getElementById('val-power').innerText = power;
+                document.getElementById('val-resonance').innerText = resonance;
+                document.getElementById('time-display').innerText = "T+ " + aliveTime + "s";
                 
                 // Expedition button
                 const expBtn = document.getElementById('btn-expedition');
@@ -1561,7 +1594,7 @@
                 
                 if(Math.floor(this.state.aliveTime) % 5 === 0) this.updateLore();
 
-                const fuelPct = (lighthouse.fuel / lighthouse.maxFuel) * 100;
+                const fuelPct = isNaN(lighthouse.fuel) || isNaN(lighthouse.maxFuel) ? 0 : Math.max(0, Math.min(100, (lighthouse.fuel / lighthouse.maxFuel) * 100));
                 document.getElementById('bar-fuel').style.width = fuelPct + "%";
                 
                 // Costs
