@@ -249,7 +249,7 @@
     </div>
 
     <div id="manual-modal">
-        <button class="close-btn" onclick="document.getElementById('manual-modal').style.display='none'">X</button>
+        <button class="close-btn" onclick="UI.closeManual()">X</button>
                 <div class="man-nav">
             <div class="man-tab active" onclick="UI.switchTab(0, this)">DIRECTIVES</div>
             <div class="man-tab" onclick="UI.switchTab(1, this)">CATALOGUE</div>
@@ -370,7 +370,7 @@
             <div class="fuel-bar-bg"><div class="fuel-fill" id="bar-fuel"></div></div>
         </div>
 
-        <button id="manual-open-btn" onclick="document.getElementById('manual-modal').style.display='flex'">📖</button>
+        <button id="manual-open-btn" onclick="UI.openManual()">📖</button>
 
         <div class="zoom-controls">
             <button class="zoom-btn" onclick="Game.cameraZoom(1.2)" title="Zoom In">+</button>
@@ -586,6 +586,7 @@
             frameTime: 0, // For delta time calculation
             isDragging: false,
             dragStart: {x:0, y:0},
+            clickedDebris: false, // Flag to prevent hold when clicking debris
 
             upgrades: { lens:1, gear:1, focus:1 },
 
@@ -618,7 +619,13 @@
                         return;
                     }
                     if(e.button === 0) { // Left click
-                        this.setHold(true);
+                        // Small delay to allow click detection first
+                        setTimeout(() => {
+                            if(!this.clickedDebris) {
+                                this.setHold(true);
+                            }
+                            this.clickedDebris = false;
+                        }, 10);
                     } else if(e.button === 2 || (e.ctrlKey && e.button === 0)) { // Right click or Ctrl+click for drag
                         this.isDragging = true;
                         this.dragStart.x = e.clientX;
@@ -873,6 +880,7 @@
                     let dist = Math.sqrt((worldX-d.x)**2 + (worldY-d.y)**2);
                     // Use fixed world distance, not zoom-adjusted
                     if(dist < 40) {
+                        this.clickedDebris = true; // Set flag to prevent hold
                         let gain = (d.type==='fuel'?15:0);
                         const lighthouse = this.lighthouses[this.activeLighthouseId];
                         if(lighthouse) {
@@ -1206,8 +1214,11 @@
             toggleGalaxyMap() {
                 this.galaxyMapActive = !this.galaxyMapActive;
                 if(this.galaxyMapActive) {
+                    this.state.paused = true;
                     this.log("GALAXY MAP ACTIVE - ZOOM OUT TO VIEW NETWORK");
                     this.camera.zoom = Math.min(0.5, this.camera.zoom);
+                } else {
+                    this.state.paused = false;
                 }
             },
 
@@ -1624,6 +1635,14 @@
             closeSettings() { 
                 Game.state.paused = false; 
                 document.getElementById('settings-modal').style.display = 'none'; 
+            },
+            openManual() {
+                Game.state.paused = true;
+                document.getElementById('manual-modal').style.display = 'flex';
+            },
+            closeManual() {
+                Game.state.paused = false;
+                document.getElementById('manual-modal').style.display = 'none';
             },
             switchTab(idx, btn) {
                 document.querySelectorAll('.man-page').forEach(p => p.classList.remove('active'));
